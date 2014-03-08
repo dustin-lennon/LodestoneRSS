@@ -20,6 +20,10 @@ You can always get the latest source from <http://github.com/demonicpagan/Lodest
 
 Changelog - Dates are in Epoch time
 -----------------------------------
+1394237093
+
+*	Fixed spelling errors and removed excess white space
+
 1394236566
 
-*	Initial creation and upload of this WordPress plugin.
+*	Initial creation and upload of this WordPress plug-in.

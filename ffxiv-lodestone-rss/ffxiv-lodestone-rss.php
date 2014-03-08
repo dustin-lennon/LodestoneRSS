@@ -1,11 +1,10 @@
 <?php
 /*
 Plugin Name: FFXIV Lodestone RSS for Wordpress
-Description: Using XIVPads.com json file, display an RSS to show annoucements made on the official lodestone.
+Description: Using XIVPads.com json file, display an RSS to show announcements made on the official lodestone.
 Version: 1.0
 Author: Demonicpagan
 Author URI: http://ffxiv.stelth2000inc.com
-
 
 Copyright 2007-2014  Demonicpagan  (email : demonicpagan@gmail.com)
 
@@ -46,7 +45,7 @@ function FFXIV_lodestone_show_rss($oldcontent)
 {
 	// Ensure we don't lose the original page
 	$newcontent = $oldcontent;
-	
+
 	// Detect if we need to render the information by looking for the 
 	// special string <!-- FFXIV_RSS -->
 	if (preg_match(WP_STR_SHOW_FFXIV_RSS, $oldcontent, $matches))
@@ -77,18 +76,18 @@ function FFXIV_Render_RSS()
 		$url = $Data['data'][$i]['url'];
 		$title = $Data['data'][$i]['title'];
 		$image = $Data['data'][$i]['image'];
-		
+
 		$datetime = gmdate("F j, Y @ g:i a", $timestamp);
-		
+
 		$content .= "<a href='$url' target='_blank'>$title</a><br /><img src='$image' /><br />Posted on $datetime.<br />";
 	}
 
 	// Credit link
 	$content .= "<div sytle='font-size: 8pt; font-family: Verdana;' align='center'>Powered By FFXIV Lodestone RSS Plugin Created By <a href='http://ffxiv.stelth2000inc.com'>Demonic Pagan</a></div>";
-	
+
 	// Add some space after the HTML
 	$content .= "<br /><br />\n\n";
-	
+
 	return $content;
 }
 

@@ -1,0 +1,1 @@
+php5 -q /home/demonicpagan/ffxiv/wp-content/plugins/ffxiv-lodestone-rss/lodestone_rss.php '/home/demonicpagan/ffxiv/wp-content/plugins/ffxiv-lodestone-rss/' >/dev/null 2>&1

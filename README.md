@@ -17,12 +17,17 @@ Hosting Local JSON file
 ------------------------
 If you would like to host your own JSON file, make the following adjustments and additions:
 
-1. Upload api.php and lodestone_rss.php as well to your web server.
+1. Edit genRSS.sh file to where it matches the location of where your lodestone_rss.php is and the path location of where
+api.php is.
 
 2. Edit line 69 to where it reads something similar to `$Data = json_decode(file_get_contents('http://ffxiv.stelth2000inc.com/wp-content/plugins/ffxiv-lodestone-rss/lodestone_rss.json'), true);`.
 
-3. Create a cron job to run lodestone_rss.php hourly
-	`0 * * * * php5 /path/to/lodestone_rss.php`
+3. Upload api.php, genRSS.sh, and lodestone_rss.php as well to your web server.
+
+4. chmod genRSS.sh to 775
+
+5. Create a cron job to run lodestone_rss.php hourly
+	`0 * * * *  /home/demonicpagan/ffxiv/wp-content/plugins/ffxiv-lodestone-rss/genRSS.sh`
 
 In the future, I'll add this as a feature to enable/disable running locally after creating an administration back-end for the plug-in.
 
@@ -33,6 +38,12 @@ You can always get the latest source from <http://github.com/demonicpagan/Lodest
 
 Change log - Dates are in Epoch time
 -----------------------------------
+1394880300
+
+*	Created genRSS.sh
+*	Updated lodestone_rss.php because it wasn't generating and updating local lodestone_rss.json
+from crontab
+
 1394739095
 
 *	Created lodestone_rss.php file and included XIVPads-LodestoneAPI <https://github.com/viion/XIVPads-LodestoneAPI>

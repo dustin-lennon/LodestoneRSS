@@ -65,7 +65,7 @@ function FFXIV_Render_RSS()
 	$content .= "\n\n";
 
 	// Get json file data
-	$Data = json_decode(file_get_contents('http://xivpads.com/lodestone_rss.json'), true);
+	$Data = json_decode(file_get_contents('http://ffxiv.stelth2000inc.com/wp-content/plugins/ffxiv-lodestone-rss/lodestone_rss.json'), true);
 
 	// Parse the json data file
 	$total = $Data['total'];

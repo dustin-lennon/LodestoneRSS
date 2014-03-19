@@ -1,7 +1,11 @@
 <?php
-include_once('api.php');
-
-$Output = 'lodestone_rss.json';
+#Check if exec by Command line (this is where path is sent from sh file)
+if (isset($argv[1]) && $argv[1])
+{
+	$path = $argv[1];
+	include $path .'api.php';
+	$Output = $path .'lodestone_rss.json';
+}
 
 // New Lodestone
 $API = new LodestoneAPI();

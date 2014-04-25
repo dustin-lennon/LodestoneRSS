@@ -38,6 +38,10 @@ You can always get the latest source from <http://github.com/demonicpagan/Lodest
 
 Change log - Dates are in Epoch time
 -----------------------------------
+1398434162
+
+*	Updated api.php in accordence to viion@8d2b7d99bcef5695d9cde67e76f43cadc7d7623c and viion@cfeecd7720e8af744b64723e964371472a714adb
+
 1394880300
 
 *	Created genRSS.sh

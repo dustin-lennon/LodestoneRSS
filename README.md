@@ -40,7 +40,7 @@ Change log - Dates are in Epoch time
 -----------------------------------
 1398434162
 
-*	Updated api.php in accordence to viion/XIVPads-LodestoneAPI@8d2b7d99bcef5695d9cde67e76f43cadc7d7623c and viion/XIVPads-LodestoneAPI@cfeecd7720e8af744b64723e964371472a714adb
+*	Updated api.php in accordence to [8d2b7d9](https://github.com/viion/XIVPads-LodestoneAPI/commit/8d2b7d99bcef5695d9cde67e76f43cadc7d7623c) and [cfeecd7](https://github.com/viion/XIVPads-LodestoneAPI/commit/cfeecd7720e8af744b64723e964371472a714adb)
 
 1394880300
 

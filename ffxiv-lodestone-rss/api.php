@@ -4,26 +4,139 @@
         --------------------------------------------------
         Author:     Josh Freeman (Premium Virtue)
         Support:    http://xivpads.com/?Portal
-        Version:    4.0
+        Version:    5
         PHP:        5.4
         
         Always ensure you download from the github
         https://github.com/viion/XIVPads-LodestoneAPI
         --------------------------------------------------
+        If you have an auto loader, either change the namespace
+        or put the API into /api/lodestone/api.php
+
+        Legacy new LodestoneAPI(); will still work.
+        --------------------------------------------------
+        Note on foreign character results, these in raw format
+        will render very weird, this happens when debugging
+        and it is usually because no charset, you can add a
+        meta tag to your document to get true output.
+        
+            <meta charset="UTF-8">
+
+        View the test.php script as an example.
     */
 
     // Debug stuff
     //error_reporting(-1);
-    //if (!function_exists('show')) { function show($Data) { echo '<pre>'; print_r($Data); echo '</pre>'; } }
 
-    /*  LodestoneAPI
-     *  ------------
+    // Namespace
+    namespace Viion\Lodestone;
+
+    /*  trait 'Funky'
+     *  Cool functions that all classes will get access to
      */
-    class LodestoneAPI extends Parser
+    trait Funky 
+    {
+        /*  - sƒow
+         *  Shows the contents of an object.
+         */
+        function show($data = null)
+        { 
+            // If there is no data, replace it with this
+            if (!$data) { $data = $this; }
+            
+            // Print it
+            echo '<pre>';
+            print_r($data);
+            echo '</pre>'; 
+        }
+
+        /*  - sksort
+         *  Sorts by a key. Can handle multi-dimentional arrays.
+         *  It is used globally, so it modifies the pointered array, thus use it like so:
+         *      
+         *      $array = ['some' => 'array'];
+         *      $this->sksort($array, 'some');
+         */
+        function sksort(&$array, $subkey, $sort_ascending = false) 
+        {
+            if (count($array))
+            {
+                $temp_array[key($array)] = array_shift($array);
+            }
+
+            foreach($array as $key => $val)
+            {
+                $offset = 0;
+                $found = false;
+
+                foreach($temp_array as $tmp_key => $tmp_val)
+                {
+                    if(!$found and strtolower($val[$subkey]) > strtolower($tmp_val[$subkey]))
+                    {
+                        $temp_array = array_merge(    (array)array_slice($temp_array,0,$offset),
+                                                    array($key => $val),
+                                                    array_slice($temp_array,$offset)
+                                                  );
+                        $found = true;
+                    }
+                    $offset++;
+                }
+
+                if(!$found)
+                {
+                    $temp_array = array_merge($temp_array, array($key => $val));
+                }
+            }
+
+            if ($sort_ascending)
+            {
+                $array = array_reverse($temp_array);
+            }
+            else
+            {
+                $array = $temp_array;
+            }
+        }
+
+        /*  - log
+         *  Sends a message to the global log variable if it exists
+         */
+        function log($line, $message, $Array = null)
+        {
+            if (array_key_exists('API_Logger', $GLOBALS))
+            {
+                global $API_Logger;
+
+                // If we have an array, append per param
+                if ($Array)
+                {
+                    $message = $message .' # Params: ';
+                    foreach($Array as $i => $param)
+                    {
+                        $message = $message . '[('. $i .') '. $param .']';
+                    }
+                }
+
+                // Append line number
+                $message = $line .' > '. $message;
+
+                // Log
+                $API_Logger->log($message);
+            }
+        }
+    }
+
+    /*  trait 'Funky'
+     *  Various configuration data to be used by other classes
+     */
+    trait Config
     {
         // url addresses to various lodestone content. (DO NOT CHANGE, it will break some functionality of the API)
         private $URL =
         [
+            # base url
+            'base' => 'http://eu.finalfantasyxiv.com',
+
             # Search related urls
             'search' =>
             [
@@ -52,24 +165,51 @@
                 'activity'      => '/activity/',
             ],
 
-            # Topics
+            # Lodestone
             'lodestone' =>
             [
+                'news'          => 'http://eu.finalfantasyxiv.com/lodestone/news/',
                 'topic'         => 'http://eu.finalfantasyxiv.com/lodestone/topics/',
+                'notices'       => 'http://eu.finalfantasyxiv.com/lodestone/news/category/1',
+                'maintenance'   => 'http://eu.finalfantasyxiv.com/lodestone/news/category/2',
+                'updates'       => 'http://eu.finalfantasyxiv.com/lodestone/news/category/3',
+                'status'        => 'http://eu.finalfantasyxiv.com/lodestone/news/category/4',
+
+                // Multi language is currently not supposed as the "Dev Tracker" links change
+                // based on time. I could make it parse this page, get the correct link and
+                // then go parse the dev tracker links, but that is multiple curl and I dont
+                // want to do that just yet. Maybe in the future!
+                'forums'        =>'http://forum.square-enix.com/ffxiv/forum.php',
+            ],
+
+            ###
+
+            # Social IDs
+            'social' =>
+            [
+                'youtube'       => 'FINALFANTASYXIV',
+            ],
+
+            # Youtube API
+            'youtube' =>
+            [
+                'channels'      => 'https://www.googleapis.com/youtube/v3/channels?part=contentDetails&forUsername={channel}&key={key}',
+                'playlists'     => 'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults={max}&playlistId={playlistID}&key={key}',
+            ],
+
+            # Because twitter is a useless piece of shit when it comes to API
+            # and practically prevents public access even through app key (like youtube)
+            # I will have to do the old fashion source code parse... Fun!
+            'twitter' =>
+            [
+                'en' => 'https://twitter.com/ff_xiv_en'
             ],
         ];
 
-        // defaults
-        private $defaults =
-        [
-            'automaticallyParseFreeCompanyMembers' => false,
-            'pagesPerFreeCompanyMemberList' => 20,
-        ];
-        
-        // Configuration
+        // Gamedataz
         public $AchievementCategories = [1, 2, 4, 5, 6, 8, 11, 12, 13];
-        public $ClassList = [];
-        public $ClassDisicpline = [];
+
+        // Gear sets
         public $GearSlots = 
         [
             "main","main2","shield","soul crystal",
@@ -77,20 +217,19 @@
             "necklace","earrings","bracelets","ring","ring2"
         ];
 
-        
-        // List of characters parsed
-        public $Characters = [];
-        public $Achievements = [];
-        public $Search = [];
-        
-        // List of free company data parsed
-        public $FreeCompanyList = [];
-        public $FreeCompanyMembersList = [];
+        public $ClassList = [];
+        public $ClassDisicpline = [];
 
-        // List of linkshell data parsed
-        public $Linkshells = [];
-        
-        public function __construct()
+        //---------------------------------------------------------------------
+        // Keys!
+        //---------------------------------------------------------------------
+
+        // Google API key (used to parse Youtube API)
+        // Change this to your own app ID if you wish.
+        private $GoogleAPIKey = 'AIzaSyDWPpnQYGaiZN-AuQBNyDDSCJdy9fQcHnQ';
+        public function getGoogleAPIKey() { return $this->GoogleAPIKey; }
+
+        function __construct()
         {
             // Set classes
             $this->ClassList = array(
@@ -106,10 +245,56 @@
                 "dol" => array_slice($this->ClassList, 16, 3),
             );
         }
+    }
+
+    /*  LodestoneAPI
+     *  ------------
+     */
+    class API extends Parser
+    {
+        use Funky;
+        use Config;
+
+        // defaults
+        private $defaults =
+        [
+            'automaticallyParseFreeCompanyMembers' => false,
+            'pagesPerFreeCompanyMemberList' => 20,
+        ];
+
+        // List of characters parsed
+        public $Characters = [];
+        public $Achievements = [];
+        public $Search = [];
         
-        // Quick get
+        // List of free company data parsed
+        public $FreeCompanyList = [];
+        public $FreeCompanyMembersList = [];
+
+        // List of linkshell data parsed
+        public $Linkshells = [];
+        
+        // Initialize
+        public function __construct() {}
+        
+        #-------------------------------------------#
+        # SHORT GETS                                #
+        #-------------------------------------------#
+
+        /*  - get
+         *  Gets a character, the array can be either "name, server" OR "id". If you
+         *  pass an name and server, the API will have to search, it will then select the
+         *  first result found. If you pass an ID, the search is skipped and is twice as
+         *  fast and more reliable due to exact ID being known.
+         *
+         *  returns: Character object.
+         *
+         *  The same principle applies to getFC and getLS
+         */
         public function get($Array, $Options = null)
         {
+            $this->log(__LINE__, 'function: get() - start');
+
             // Clean
             $Name   = isset($Array['name'])     ? trim(ucwords($Array['name'])) : NULL;
             $Server = isset($Array['server'])   ? trim(ucwords($Array['server'])) : NULL;
@@ -132,6 +317,7 @@
                 $this->parseProfile($ID);
                 
                 // Return character
+                $this->log(__LINE__, 'function: get() - return');
                 return $this->getCharacterByID($ID);
             }
             else
@@ -140,7 +326,10 @@
             }
         }
 
-        // Quick get free company
+        /*  - getFC
+         *  Read "get" for characters, same rules apply to this.
+         *  returns: FreeCompany object
+         */
         public function getFC($Array, $Options = null)
         {
             // Clean
@@ -173,7 +362,10 @@
             }
         }
 
-        // Quick get linkshell
+        /*  - getLS
+         * Read "get" for characters, same rules apply to this.
+         * returns: Linkshell object
+         */
         public function getLS($Array, $Options = null)
         {
             // Clean
@@ -207,24 +399,10 @@
         }
 
         // Get lodestone object
-        public function Lodestone($Options)
-        {
-            // Get a Lodestone object
-            $Lodestone = new Lodestone();
+        public function Lodestone() { return new Lodestone(); }
 
-            // Lodestone urls
-            $Lodestone->setURLs($this->URL['lodestone']);
-
-            // If topics option set, get topics
-            if (isset($Options['topics']) && $Options['topics'])
-            {
-                $this->getSource($this->URL['lodestone']['topic']);
-                $Lodestone->setTopics($this->findAll('topics_list_inner', NULL, 'right_cont clearfix', false));
-            }
-
-            // Return lodestone object.
-            return $Lodestone;
-        }
+        // Get social object
+        public function Social() { return new Social(); }
 
         #-------------------------------------------#
         # SEARCH                                    #
@@ -233,6 +411,8 @@
         // Search a character by its name and server.
         public function searchCharacter($Name, $Server, $GetExact = true)
         {
+            $this->log(__LINE__, 'function: searchCharacter()');
+
             if (!$Name)
             {
                 echo "error: No Name Set."; 
@@ -245,12 +425,14 @@
             {
                 // Exact name for later
                 $ExactName = $Name;
+                $this->log(__LINE__, 'function: searchCharacter() - searching ...');
 
                 // Get the source
                 $this->getSource($this->URL['character']['profile'] . str_ireplace(array('%name%', '%server%'), array(str_ireplace(" ", "+", $Name), $Server), $this->URL['search']['query']));
 
                 // Get all found characters
                 $Found = $this->findAll('thumb_cont_black_50', 10, NULL, false);
+                $this->log(__LINE__, 'function: searchCharacter() - got results');
 
                 // Loop through results
                 if ($Found)
@@ -484,17 +666,21 @@
         # PROFILE                                   #
         #-------------------------------------------#
         
-        // Parse a profile based on ID
+        // Parse a profile based on ID (skips searching)
         public function parseProfile($ID)
         {
+            
+            $this->log(__LINE__, 'function: parseProfile() - parsing profile: '. $ID);
+
             if (!$ID)
             {
                 echo "error: No ID Set.";   
             }
 
             // Get the source
+            $this->log(__LINE__, 'function: parseProfile() - get source');
             $this->getSource($this->URL['character']['profile'] . $ID);
-
+            $this->log(__LINE__, 'function: parseProfile() - obtained source');
 
             if ($this->errorPage($ID))
             {
@@ -502,16 +688,24 @@
             }
             else
             {
+                $this->log(__LINE__, 'function: parseProfile() - starting parse');
+
                 // Create a new character object
                 $Character = new Character();
+                $this->log(__LINE__, 'function: parseProfile() - new character object');
 
                 // Set Character Data
                 $Character->setID(trim($ID), $this->URL['character']['profile'] . $ID);
                 $Character->setNameServer($this->findRange('player_name_thumb', 15));
 
+                $this->log(__LINE__, 'function: parseProfile() - set id, name and server');
+
                 // Only process if character name set
                 if (strlen($Character->getName()) > 3)
                 {
+                    $this->log(__LINE__, 'function: parseProfile() - parsing chunk 1');
+
+                    $Character->setTitle($this->findRange('chara_title', 2, NULL, false));
                     $Character->setAvatar($this->findRange('player_name_thumb', 10, NULL, false));
                     $Character->setPortrait($this->findRange('bg_chara_264', 2, NULL, false));
                     $Character->setRaceClan($this->find('chara_profile_title'));
@@ -522,28 +716,34 @@
                     $Character->setHPMPTP($this->findRange('param_power_area', 10));
                     $Character->setStats($this->findAll('param_left_area_inner', 12, null, false));
                     $Character->setActiveClassLevel($this->findAll('class_info', 5, null, false));
+
+                    $this->log(__LINE__, 'function: parseProfile() - parsing chunk 2');
                     
                     // Set Gear (Also sets Active Class and Job), then set item level from the gear
                     $Character->setGear($this->findAll('-- ITEM Detail --', NULL, '-- //ITEM Detail --', false));
                     $Character->setItemLevel($this->GearSlots);
 
                     #$this->segment('area_header_w358_inner');
-                    
+                    $this->log(__LINE__, 'function: parseProfile() - parsing chunk 3');
+
                     // Set Minions
                     $Minions = $this->findRange('area_header_w358_inner', NULL, '//Minion', false);
                     $Character->setMinions($Minions);
                     
                     // Set Mounts
+                    $this->log(__LINE__, 'function: parseProfile() - parsing chunk 4');
                     $Mounts = $this->findRange('area_header_w358_inner', NULL, '//Mount', false, 2);
                     $Character->setMounts($Mounts);
                     
                     #$this->segment('class_fighter');
                     
                     // Set ClassJob
+                    $this->log(__LINE__, 'function: parseProfile() - parsing chunk 5');
                     $Character->setClassJob($this->findRange('class_fighter', NULL, '//Class Contents', false));
                     
                     // Validate data
                     $Character->validate();
+                    $this->log(__LINE__, 'function: parseProfile() - complete profile parse for: '. $ID);
                     
                     // Append character to array
                     $this->Characters[$ID] = $Character;
@@ -580,9 +780,6 @@
         #-------------------------------------------#
         # ACHIEVEMENTS                              #
         #-------------------------------------------#
-        
-        // Get a list of parsed characters
-        public function getAchievements() { return $this->Achievements; }
         
         // Parse a achievements based on ID
         public function parseAchievements($ID = null)
@@ -658,11 +855,11 @@
             }
         }
 
+        // Get a list of parsed characters
+        public function getAchievements() { return $this->Achievements; }
+
         // Get the achievement categories
-        public function getAchievementCategories()
-        {
-            return $this->AchievementCategories;
-        }
+        public function getAchievementCategories() { return $this->AchievementCategories; }
 
         #-------------------------------------------#
         # FREE COMPANY                              #
@@ -688,8 +885,9 @@
                 
                 // Set Character Data
                 $FreeCompany->setID(trim($ID), $this->URL['freecompany']['profile'] . $ID);
-                $FreeCompany->setNameServerCompany($this->findRange('-- playname --', null, '-- //playname --', false));
-                $FreeCompany->setCompanyDetails($this->findRange('-- Company Profile --', null, '-- //Company Profile --', false));
+                $FreeCompany->setBasicData($this->findRange('crest_id centering_h', 10));
+                $FreeCompany->setEmblum($this->findRange('ic_crest_64', 10, null, false));
+                $FreeCompany->setFullDetails($this->findRange('-- Company Profile --', null, '-- //Company Profile --', false));
 
                 // If to parse free company members
                 if ($this->defaults['automaticallyParseFreeCompanyMembers'])
@@ -766,45 +964,565 @@
         public function getLinkshellByID($ID) { return isset($this->Linkshells[$ID]) ? $this->Linkshells[$ID] : NULL; }       
     }
 
+    // Alias for LodestoneAPI()
+    class_alias('Viion\Lodestone\API', 'Viion\Lodestone\LodestoneAPI');
+    class_alias('Viion\Lodestone\API', 'API\Lodestone\API');
+    class_alias('Viion\Lodestone\API', 'LodestoneAPI');
+    class_alias('Viion\Lodestone\API', 'API\API');
+
+
     /*  Lodestone
      *  ---------
      */
-    class Lodestone
+    class Lodestone extends Parser
     {
-        // Variables
-        private $URLs = [];
-        private $Topics = [];
-
+        use Funky;
+        use Config;
 
         // Construct
         function __construct() { }
 
-        // set urls
-        function setURLs($URLs)
-        {
-            $this->URLs = $URLs;
-        }
+        //------------------------------
+        // Lodestone pages
+        //------------------------------
 
-        // Topics
-        function setTopics($Data)
+        // Topics 
+        public function getTopics()
         {
+            $this->log(__LINE__, '[Lodestone] getTopics()');
+
+            // Parse
+            $this->getSource($this->URL['lodestone']['topic']);
+
+            // Find what we need
+            $Found = $this->findAll('topics_list_inner', NULL, 'right_cont clearfix', false);
+
+            // Temp Array
+            $Array = [];
+
             // Total topics
-            $this->Topics['total'] = count($Data);
+            $Array['total'] = count($Found);
 
-            // Loop through topics to get data
-            $TopicData = [];
-            foreach($Data as $i => $D)
+            // Default icon
+            $Icon = 'http://img.finalfantasyxiv.com/lds/pc/global/images/common/ic/news_topics.png';
+
+            // Loop through found to get data
+            $Data = [];
+            foreach($Found as $i => $D)
             {
-                // Time
-                $TopicData[$i]['time']  = trim(explode(",", explode("(", $D[3])[2])[0]);
-                $TopicData[$i]['url']   = trim(str_ireplace("/lodestone/topics/", null, $this->URLs['topic']) . explode('&quot;', explode("&gt;", $D[6])[0])[1]);
-                $TopicData[$i]['title'] = trim(explode("(", iconv("UTF-8", "ASCII//TRANSLIT", trim(strip_tags(html_entity_decode($D[6])))))[0]);
-                $TopicData[$i]['image'] = trim(explode('&quot;', $D[8])[3]);
+                $Data[$i]['time']   = trim(explode(",", explode("(", $D[3])[2])[0]);
+                $Data[$i]['url']    = trim(str_ireplace("/lodestone/topics/", null, $this->URL['lodestone']['topic']) . explode('&quot;', explode("&gt;", $D[6])[0])[1]);
+                $Data[$i]['title']  = trim(explode("(", iconv("UTF-8", "ASCII//TRANSLIT", trim(strip_tags(html_entity_decode($D[6])))))[0]);
+                $Data[$i]['image']  = trim(explode('&quot;', $D[8])[3]);
+                $Data[$i]['icon']   = $Icon;
             }
 
-            $this->Topics['data'] = $TopicData;
+            $Array['data'] = $Data;
+
+            // Return topics
+            return $Array;
         }
-        function getTopics() { return $this->Topics; }
+
+        // Notices
+        public function getNotices()
+        {
+            $this->log(__LINE__, '[Lodestone] getNotices()');
+
+            // Default icon
+            $Icon = 'http://img.finalfantasyxiv.com/lds/pc/global/images/common/ic/news_info.png';
+
+            // Run base parse
+            $Array = $this->baseParse($this->URL['lodestone']['notices'], $Icon);
+
+            // Return array
+            return $Array;
+        }
+
+        // Maintenance issues
+        public function getMaintenance()
+        {
+            $this->log(__LINE__, '[Lodestone] getMaintenance()');
+
+            // Default icon
+            $Icon = 'http://img.finalfantasyxiv.com/lds/pc/global/images/common/ic/news_maintenance.png';
+
+            // Run base parse
+            $Array = $this->baseParse($this->URL['lodestone']['maintenance'], $Icon);
+
+            // Return array
+            return $Array;
+        }
+
+        // Updates
+        public function getUpdates()
+        {
+            $this->log(__LINE__, '[Lodestone] getUpdates()');
+
+            // Default icon
+            $Icon = 'http://img.finalfantasyxiv.com/lds/pc/global/images/common/ic/news_update.png';
+
+            // Run base parse
+            $Array = $this->baseParse($this->URL['lodestone']['updates'], $Icon);
+
+            // Return array
+            return $Array;
+        }
+
+        // Status issues
+        public function getStatus()
+        {
+            $this->log(__LINE__, '[Lodestone] getStatus()');
+
+            // Default icon
+            $Icon = 'http://img.finalfantasyxiv.com/lds/pc/global/images/common/ic/news_obstacle.png';
+
+            // Run base parse
+            $Array = $this->baseParse($this->URL['lodestone']['status'], $Icon);
+
+            // Return array
+            return $Array;
+        }
+
+        // Handles the main parsing for lodestone pages that are categories.
+        private function baseParse($url, $icon)
+        {
+            $this->log(__LINE__, '[Lodestone] baseParse()', [$url, $icon]);
+
+            $this->getSource($url);
+
+            // Find what we need
+            $Found = $this->findAll('news_list clearfix', NULL, 'button bt_more', false);
+
+            // Temp Array
+            $Array = [];
+
+            // Total topics
+            $Array['total'] = count($Found);
+
+            // Loop through found to get data
+            foreach($Found as $i => $D)
+            {
+                $Temp = [];
+
+                // Icon is fixed
+                $Temp['icon'] = $icon;
+
+                // Loop through and parse
+                foreach($D as $line)
+                {
+                    // find time
+                    if (stripos($line, 'ldst_strftime') !== false)
+                    {
+                        $Temp['time'] = trim($line);
+                        $Temp['time'] = explode('(', $Temp['time'])[2];
+                        $Temp['time'] = explode(',', $Temp['time'])[0];
+                    }
+
+                    // find tag
+                    if (stripos($line, 'class=&quot;tag&quot;') !== false)
+                    {
+                        $Temp['tag'] = $this->strip_html($line);
+                    }
+
+                    // Find ID and Title
+                    if (stripos($line, 'class=&quot;link&quot;') !== false)
+                    {
+                        $Temp['message'] = $this->strip_html($line);
+                        $Temp['url'] = explode('&quot;', $line)[1];
+                        $Temp['url'] = $this->URL['base'] . $Temp['url'];
+                        $Temp['id'] = trim(explode('/', $Temp['url'])[6]);
+                    }
+                }
+
+                // Add to array
+                $Array['data'][] = $Temp;
+            }
+
+            return $Array;
+        }
+
+        //------------------------------
+        // Lodestone forums
+        //------------------------------
+
+        public function getDevPosts()
+        {
+            $this->log(__LINE__, '[Lodestone] getDevPosts()');
+
+            // Parse
+            $this->getSource($this->URL['lodestone']['forums']);
+
+            // Find what we need
+            $Found = $this->findAll('avatarcontent floatcontainer widget_post_bit', null, 'class=&quot;time&quot;', false);
+
+            // Temp Array
+            $Array = [];
+
+            // Total topics
+            $Array['total'] = count($Found);
+
+            // Loop through found to get data
+            foreach($Found as $i => $D)
+            {
+                $Temp = [];
+
+                // Grab generic data
+                foreach($D as $ii => $line)
+                {
+                    // Find user and avatar
+                    if (stripos($line, 'comments_member_avatar_link') !== false)
+                    {
+                        $var = explode('&quot;', $line)[3];
+                        $var = explode('/', $var)[1];
+                        $var = explode('-', $var);
+                        $var[1] = explode('?', $var[1]);
+
+                        $Temp['user']['id'] = trim($var[0]);
+                        $Temp['user']['name'] = trim($var[1][0]);
+
+                        // avatar
+                        $var = $D[$ii + 1];
+                        $Temp['user']['avatar'] = str_ireplace("'", "%27", 'http://forum.square-enix.com/ffxiv/'. $this->getAttribute('src', $var));
+                    }
+
+                    // Find topic title and url
+                    if (stripos($line, 'widget_post_header') !== false)
+                    {
+                        // Title
+                        $var = trim($line);
+                        $Temp['topic']['title'] = $this->strip_html($var);
+
+                        // url
+                        $var = $this->getAttribute('href', $var);
+                        $Temp['topic']['url'] = 'http://forum.square-enix.com/ffxiv/'. $var;
+
+                        // topic ID
+                        $var = explode('/', $var)[1];
+                        $var = trim(explode('-', $var)[0]);
+                        $Temp['topic']['id'] = $var;
+
+                        // Post id
+                        $var = explode('#', $Temp['topic']['url']);
+                        if (isset($var[1]))
+                        {
+                            $var = $var[1];
+                            $var = str_ireplace('post', null, $var);
+                            $Temp['topic']['post_id'] = trim($var);
+                        }
+                        else
+                        {
+                            // New topic, not a reply post, so post is same as topic id
+                            $Temp['topic']['post_id'] = $Temp['topic']['id'];
+                        }
+                    }
+
+                    // Find time
+                    if (stripos($line, 'class=&quot;time&quot;') !== false)
+                    {
+                        $var = explode(' ', $line);
+                        $var['date'] = $var[0];
+
+                        // Replace 'today' with actually today...
+                        if (trim($var['date']) == 'Today')
+                        {
+                            $var['date'] = date('m-d-Y', time());
+                        }
+
+                        // Replace 'yesterday' with actually yesterday ...
+                        if (trim($var['date']) == 'Yesterday')
+                        {
+                            $var['date'] = date('m-d-Y', (time() - (60*60*24)));
+                        }
+
+                        // Change date format
+                        $var['date'] = str_ireplace('-', '/', $var['date']);
+
+                        // Get time
+                        $var['format'] = $var[1] .' '. $var[2] .'-'. $var[3];
+                        $var['format'] = $this->strip_html($var['format']);
+                        $var['format'] = explode('-', $var['format']);
+
+                        // Create string to parse
+                        $timeString = $this->strip_html($var['date'] .' '. implode(' ', $var['format']));
+                        $timeUnix = strtotime($timeString);
+
+                        $Temp['time']['string'] = $timeString;
+                        $Temp['time']['unix'] = $timeUnix;
+                    }
+                }
+
+                // Getting the message is a little more complicated as
+                // it can be across multiple lines, so going to do
+                // another loop just specifically for the message
+                $message = [];
+                $addToMessage = false;
+                foreach($D as $ii => $line)
+                {
+                    // If we've found the line with the message, enable
+                    // addToMessage to begin populating the message array
+                    if (stripos($line, 'widget_post_content') !== false)
+                    {
+                        $addToMessage = true;
+                    }
+
+                    // If add to message is true, add the line to the message
+                    if ($addToMessage)
+                    {
+                        $message[] = $line;
+                    }
+
+                    // If we've at the 'widget_post_header' tag, the message has ending
+                    if (stripos($line, 'widget_post_header') !== false)
+                    {
+                        $addToMessage = false;
+                        break;
+                    }
+                }
+
+                // Remove last element
+                array_pop($message);
+
+                // Make 1 line
+                $message = implode(' ', $message);
+
+                // Remove html
+                $message = $this->strip_html($message);
+                $Temp['topic']['message'] = $message;
+
+                // Make sure dev post has a message
+                if (strlen($message) > 5)
+                {
+                    // Add to array
+                    $Array['data'][] = $Temp;
+                }
+            }
+
+            // Return
+            return $Array;
+        }
+    }
+
+    /*  Social
+     *  ---------
+     */
+    class Social extends Parser
+    {
+        use Funky;
+        use Config;
+
+        // Construct
+        function __construct() { }
+
+        //------------------------------
+        // Lodestone pages
+        //------------------------------
+
+        // Youtube videos 
+        function getYoutubeVideos($max = 20, $simple = true)
+        { 
+            $this->log(__LINE__, '[Social] getYoutubeVideos()', [$max, $simple]);
+            
+            // Get key
+            $gkey = $this->getGoogleAPIKey();
+
+            // Set urls
+            $channelURL = $this->URL['youtube']['channels'];
+            $playlistURL = $this->URL['youtube']['playlists'];
+
+            // Set social ids
+            $socialID = $this->URL['social']['youtube'];
+
+            // Replace
+            $channelURL = str_ireplace(['{channel}', '{key}'], [$socialID, $gkey], $channelURL);
+
+            // Get json
+            $this->log(__LINE__, 'getYoutubeVideos() > file_get_contents() - URL: '. $channelURL);
+            $json = json_decode(file_get_contents($channelURL), true);
+            
+            // Make sure we got somethingz and it not empty
+            if ($json)
+            {
+                // Get the playlist id
+                $playlistID = $json['items'][0]['contentDetails']['relatedPlaylists']['uploads'];
+
+                // Replace
+                $playlistURL = str_ireplace(['{max}', '{playlistID}', '{key}'], [$max, $playlistID, $gkey], $playlistURL);
+
+                // Get json
+                $this->log(__LINE__, 'getYoutubeVideos() > file_get_contents() - URL: '. $playlistURL);
+                $json = json_decode(file_get_contents($playlistURL), true);
+
+                // Make sure we got somethingz and it not empty
+                if ($json)
+                {
+                    // If simple is true, we will just get very specific information
+                    // else if simple is not true, we will return the entire json result
+                    if ($simple)
+                    {
+                        $this->log(__LINE__, 'getYoutubeVideos() - Generating simple array');
+
+                        // Temp Array
+                        $youtubeUploadsArray = [];
+
+                        // Set total
+                        $youtubeUploadsArray['total'] = $json['pageInfo']['totalResults'];
+                        $youtubeUploadsArray['fetched'] = $json['pageInfo']['resultsPerPage'];
+
+                        // Prevent PHP notices
+                        $youtubeUploadsArray['data'] = [];
+
+                        // Loop
+                        foreach($json['items'] as $upload)
+                        {
+                            // Parse time
+                            $unixTime = strtotime($upload['snippet']['publishedAt']);
+
+                            // Set temp array data
+                            $arr =
+                            [
+                                'time'          => $unixTime,
+                                'published'     => $upload['snippet']['publishedAt'],
+                                'title'         => $upload['snippet']['title'],
+                                'description'   => $upload['snippet']['description'],
+
+                                'video' =>
+                                [
+                                    'id'        => $upload['snippet']['resourceId']['videoId'],
+                                    'url'       => 'https://www.youtube.com/watch?v='. $upload['snippet']['resourceId']['videoId'],
+                                ],
+
+                                'thumbnails' =>
+                                [
+                                   'default'    => $upload['snippet']['thumbnails']['default'],
+                                   'medium'     => isset($upload['snippet']['thumbnails']['medium']) ? $upload['snippet']['thumbnails']['medium'] : null,
+                                   'high'       => isset($upload['snippet']['thumbnails']['high']) ? $upload['snippet']['thumbnails']['high'] : null,
+                                   'standard'   => isset($upload['snippet']['thumbnails']['standard']) ? $upload['snippet']['thumbnails']['standard'] : null,
+                                   'maxres'     => isset($upload['snippet']['thumbnails']['maxres']) ? $upload['snippet']['thumbnails']['maxres'] : null,
+                                ]
+                            ];
+
+                            $youtubeUploadsArray['data'][] = $arr;
+                        }
+
+                        // Return
+                        $this->log(__LINE__, 'getYoutubeVideos() - Finished');
+                        return $youtubeUploadsArray;
+                    }
+                    else
+                    {
+                        // return
+                        return $json;
+                    }
+                }
+                else
+                {
+                    // No json return
+                    $this->log(__LINE__, '[Social] getYoutubeVideos() - Failure: No json on related playlist id');
+                }
+            }
+            else
+            {
+                // No json return
+                $this->log(__LINE__, '[Social] getYoutubeVideos() - Failure: No json on social channel id');
+            }
+        }
+
+        // Tweetz (this can fail often on the curl, cus twitter fking sucks)
+        function getTweets($max = 20, $language = 'en')
+        {
+            $this->log(__LINE__, '[Social] getTweets()', [$max, $language]);
+
+            // URL to parse
+            $url = $this->URL['twitter'][$language];
+
+            // Get source
+            $Source = $this->getSource($url);
+            $this->log(__LINE__, '[Social] getTweets() - Obtained source, parsing...');
+
+            // Get tweets source
+            $TweetsFound = $this->findAll('data-component-term', NULL, 'ProfileTweet-actionList u-cf js-actions', false);
+
+            // Temp array
+            $Tweets = [];
+
+            // Set total
+            $Tweets['total'] = count($TweetsFound);
+
+            // Loop
+            foreach($TweetsFound as $i => $tf)
+            {
+                $temp = [];
+
+                // Loop through each line
+                foreach($tf as $ii => $line)
+                {
+                    // Check for ID
+                    if (stripos($line, 'data-tweet-id') !== false)
+                    {
+                        $temp['id'] = trim(explode('&quot;', $line)[1]);
+                    }
+
+                    // Check for tweet context
+                    if (stripos($line, 'ProfileTweet-text') !== false)
+                    {
+                        $temp['message'] = '&lt;p '. $tf[$ii + 1];
+                        $temp['message'] = $this->strip_html($temp['message']);
+                        $temp['message'] = str_ireplace('http', ' http', $temp['message']);
+                        $temp['message'] = trim(str_ireplace('  ', ' ', $temp['message']));
+                    }
+
+                    // Check for avatar
+                    if (stripos($line, 'js-action-profile-avatar') !== false)
+                    {
+                        $temp['avatar']['normal'] = explode(' ', $line)[3];
+                        $temp['avatar']['normal'] = trim(str_ireplace(['src=', '&quot;'], null, $temp['avatar']['normal']));
+
+                        // Other sizes
+                        $temp['avatar']['bigger']   = trim(str_ireplace('_normal', '_bigger', $temp['avatar']['normal']));
+                        $temp['avatar']['mini']     = trim(str_ireplace('_normal', '_mini', $temp['avatar']['normal']));
+                        $temp['avatar']['original'] = trim(str_ireplace('_normal', null, $temp['avatar']['normal']));
+                    }
+
+                    // Check for time
+                    if (stripos($line, 'data-time=') !== false)
+                    {
+                        $temp['time']['unix'] = trim(str_ireplace(['data-time=', '&quot;'], null, $line));
+                        $temp['time']['stamp'] = date('F j, Y, g:i a', $temp['time']['unix']);
+                    }
+
+                    // Check if retweet
+                    if (stripos($line, 'retweeted') !== false)
+                    {
+                        $temp['retweet'] = true;
+                    }
+
+                    // Check for profile name
+                    if (stripos($line, 'ProfileTweet-fullnam') !== false)
+                    {
+                        $temp['profile'] = $this->strip_html($line);
+                    }
+
+                    // Check for screen name and user id
+                    if (stripos($line, 'data-screen-name') !== false)
+                    {
+                        $data = explode("&quot;", $line);
+                        $temp['user']['handle']     = trim($data[1]);
+                        $temp['user']['profile']    = trim($data[3]);
+                        $temp['user']['id']         = trim($data[5]);
+                    }
+                }
+
+                // Create link
+                $temp['url'] = 'http://twitter.com/'. $temp['user']['handle'] .'/status/'. $temp['id'];
+
+                // Append temp to tweets
+                $Tweets['data'][] = $temp;
+            }
+
+            // Return
+            $this->log(__LINE__, '[Social] getTweets() - Returning Tweets');
+            return $Tweets;
+        }
     }
 
 
@@ -813,11 +1531,15 @@
      */
     class Character
     {
+        use Funky;
+        use Config;
+
         private $ID;
         private $Lodestone;
         private $Name;
         private $NameClean;
         private $Server;
+        private $Title;
         private $Avatars;
         private $Portrait;
         private $Legacy;
@@ -853,14 +1575,34 @@
         // NAME + SERVER
         public function setNameServer($String)
         {
-            $this->Name         = str_ireplace("&#39;", "'", trim($String[0]));
-            $this->Server       = trim(str_ireplace(["(", ")"], null, $String[1]));
+            $name = null;
+            $server = null;
+
+            // Dirty temp fix
+            foreach($String as $i => $s)
+            {
+                if (stripos($s, '(') !== false)
+                {
+                    $server = $s;
+                    $name = $String[$i - 1];
+                }
+            }
+
+            $this->Name         = str_ireplace("&#39;", "'", trim($name));
+            $this->Server       = trim(str_ireplace(["(", ")"], null, $server));
             $this->NameClean    = preg_replace('/[^a-z]/i', '', strtolower($this->Name));   
         }
         public function getName() { return $this->Name; }
         public function getServer() { return $this->Server; }
         public function getNameClean() { return$this->NameClean; }
         
+        // TITLE
+        public function setTitle($String)
+        {
+            $this->Title = strip_tags(htmlspecialchars_decode(trim($String[0]), ENT_QUOTES));
+        }
+        public function getTitle() { return $this->Title; }
+
         // AVATAR
         public function setAvatar($String)
         {
@@ -872,7 +1614,7 @@
                 $this->Avatars['96'] = str_ireplace("50x50", "96x96", $this->Avatars['50']);
             }
         }
-        public function getAvatar($Size) { return $this->Avatars[$Size]; }
+        public function getAvatar($Size = null) { if (!$Size) $Size = 96; return $this->Avatars[$Size]; }
         
         // PORTRAIT
         public function setPortrait($String)
@@ -1037,14 +1779,30 @@
         // GEAR
         public function setGear($Array)
         {
+            
+            $this->log(__LINE__, '... set gear'); 
+
             $this->Gear['slots'] = count($Array);
             $GearArray = NULL;
             
             // Get ID List
-            $ItemIDArray = json_decode(file_get_contents("http://xivpads.com/items.json"), true);
+            //$this->log(__LINE__, '... getting items json from XIVPads'); 
+
+            // THIS FILE SHOULD REALLY BE HOSTED LOCALLY
+            // OR MEMCACHED
+            // OR REDIS
+            // OR unoe
+
+            $ItemIDArray = [];
+            if (file_exists(__DIR__.'/items.json'))
+            {
+                $ItemIDArray = json_decode(file_get_contents(__DIR__."/items.json"), true);
+                $this->log(__LINE__, '... >> obtained item json locally'); 
+            }
             
             // Loop through gear equipped
             $Main = NULL;
+            $this->log(__LINE__, '... big loop'); 
             foreach($Array as $A)
             {
                 // Temp array
@@ -1052,6 +1810,7 @@
                 //Show($A);
 
                 // Loop through data
+                $this->log(__LINE__, '... big loop 2'); 
                 foreach($A as $i => $Line)
                 {                    
                     // Name / Id
@@ -1187,17 +1946,22 @@
                         $Temp['no_equip_count'] = count($Temp['no_equip_slots']);
                     }
                 }
+                $this->log(__LINE__, '... big loop 2 /end'); 
 
                 // Slot manipulation, mainly for rings
                 $Slot = $Temp['slot'];
                 if (isset($GearArray['slots'][$Slot])) { $Slot = $Slot . 2; }   
-                $Temp['slot'] = $Slot;  
+                $Temp['slot'] = $Slot; 
+
+                // Add index
+                $Temp['slot_id'] = array_search($Temp['slot'], $this->GearSlots); 
                 
                 // Append array
                 $GearArray['numbers'][] = $Temp;
                 $GearArray['slots'][$Slot] = $Temp;
-            }   
-            
+            }
+            $this->log(__LINE__, '... big loop /end'); 
+
             // Set Gear
             $this->Gear['equipped'] = $GearArray;
             
@@ -1222,6 +1986,9 @@
         // Item Level
         public function setItemLevel($GearSlots)
         {
+            
+            $this->log(__LINE__, '... set item level'); 
+
             // Remoove soul crystal as its not calculated in ilv
             unset($GearSlots[3]);
 
@@ -1239,6 +2006,7 @@
             
             // Loop through gear to calculate item levels
             $itemLevels = [];
+            $itemlevelsSlotID = [];
             foreach($GearSlots as $Slot)
             {
                 // Get the gear
@@ -1268,9 +2036,13 @@
 
                 // Add item level
                 $itemLevels[$Slot] = $itemLevel;
+
+                // Insert as slot id
+                $itemlevelsSlotID[array_search($Slot, $this->GearSlots)] = $itemLevel;
             }
 
             $this->Gear['item_level_array'] = $itemLevels;
+            $this->Gear['item_level_slots'] = $itemlevelsSlotID;
             $this->Gear['item_level_total'] = array_sum($itemLevels);
             $this->Gear['item_level_average'] = floor($this->Gear['item_level_total'] / 13);
         }
@@ -1290,6 +2062,8 @@
                     $arr = array();
                     $arr['name'] = trim(explode('&quot;', $Array[$i])[5]);
                     $arr['icon'] = trim(explode('&quot;', $Array[$i + 1])[1]);
+                    $arr['name'] = str_ireplace("&#39;", "'", html_entity_decode($arr['name']));
+
                     $Pets[] = $arr;
                 }
                 
@@ -1373,7 +2147,7 @@
         }
         public function getClassJob($Class) { return $this->ClassJob[strtolower($Class)]; }
         public function getClassJobs($Specific = null) 
-        { 
+        {
             $arr = array();
             if ($Specific)
             {
@@ -1415,7 +2189,7 @@
 
             // Get a specific job
             // Sort by value
-            (new LSFunctions())->sksort($ClassJobs, $OrderBy, $Ascending);
+            $this->sksort($ClassJobs, $OrderBy, $Ascending);
 
             // Return
             return $ClassJobs;
@@ -1424,6 +2198,8 @@
         // VALIDATE
         public function validate()
         {
+            $this->log(__LINE__, 'function: validate() - start');
+
             // Check Name
             if (!$this->Name)           { $this->Validated = false; $this->Errors[] = 'Name is false'; }
             if (!$this->Server)         { $this->Validated = false; $this->Errors[] = 'Server is false'; }
@@ -1448,25 +2224,108 @@
                 if (!is_numeric($CJ['exp']['current']) && $CJ['exp']['current'] != '-') { $this->Validated = false; $this->Errors[] = $CJ['class'] .' level was non numeric and not "-"'; }
                 if (!is_numeric($CJ['exp']['max']) && $CJ['exp']['current'] != '-') { $this->Validated = false; $this->Errors[] = $CJ['class'] .' level was non numeric and not "-"'; }
             }
+
+            $this->log(__LINE__, 'function: validate() - finished');
         }
         public function isValid() { return $this->Validated; }
         public function getErrors() { return $this->Errors; }
+
+        // Data dump
+        public function datadump()
+        {
+            $character_data =
+            [
+                // Basic profile data
+                'id'            => $this->getID(),
+                'lsid'          => $this->getLodestone(),
+                'name'          => $this->getName(),
+                'server'        => $this->getServer(),
+                'title'         => $this->getTitle(),
+                'nameclean'     => $this->getNameClean(),
+                'avatar'        => $this->getAvatar(),
+                'portrait'      => $this->getPortrait(),
+                'race'          => $this->getRace(),
+                'clan'          => $this->getClan(),
+                'legacy'        => $this->getLegacy(),
+                'nameday'       => $this->getNameday(),
+                'guardian'      => $this->getGuardian(),
+                'city'          => $this->getCity(),
+
+                // Biography
+                'biography'     => $this->getBiography(),
+
+                // Company
+                'company'       => 
+                [ 
+                    'name'      => $this->getCompanyName(), 
+                    'rank'      => $this->getCompanyRank(),
+                ],
+
+                // Free Company
+                'freecompany'   => $this->getFreeCompany(),
+
+                // Stats
+                'stats'         => $this->getStats(),
+
+                // Gear
+                'gear'          => $this->getGear(),
+
+                // Active state
+                'active'        =>
+                [
+                    'class'     => $this->getActiveClass(),
+                    'job'       => $this->getActiveJob(),
+                    'level'     => $this->getActiveLevel(),
+                ],
+
+                // Item level
+                'itemlevel'     =>
+                [
+                    'array'     => $this->getItemLevelArray(),
+                    'total'     => $this->getItemLevelTotal(),
+                    'average'   => $this->getItemLevelAverage(),
+                ],
+
+                // Minions
+                'minions'       => $this->getMinions(),
+
+                // Mounts
+                'mounts'        => $this->getMounts(),
+
+                // Class jobs
+                'classjobs'     => $this->getClassJobs(),
+            ];
+
+            return $character_data;
+        }
     }
 
     /*  Free Company
      *  ------------
      */ 
-    class FreeCompany
+    class FreeCompany extends Parser
     {
+        use Funky;
+        use Config;
+
         private $ID;
         private $Lodestone;
         private $Company;
         private $Name;
         private $Server;
+        private $Emblum;
+
         private $Tag;
         private $Formed;
         private $MemberCount;
         private $Slogan;
+        private $Ranking;
+        private $Focus;
+        private $Active;
+        private $Seeking;
+        private $Recruitment;
+        private $Estate;
+        
 
         private $Members = [];
 
@@ -1484,20 +2343,173 @@
         public function getLodestone() { return $this->Lodestone; }
 
         // NAME + SERVER
-        public function setNameServerCompany($String)
+        public function setBasicData($String)
         {
-            $this->Company  = trim(explode("&lt;", explode("friendship_color", $String[9])[0])[0]);
-            $this->Name     = trim(strip_tags(html_entity_decode($String[10])));
-            $this->Server   = trim(str_ireplace(array("(", ")"), null, strip_tags(html_entity_decode($String[11]))));
+            $this->Company  = trim($this->strip_html($String[0]));
+            $this->Name     = trim($this->strip_html($String[1]));
+            $this->Server   = trim(str_ireplace(['(', ')'], null, $this->strip_html($String[2])));
         }
 
-        // TAG + FORMED + MEMBERS + SLOGAN
-        public function setCompanyDetails($String)
+        // Emblum
+        public function setEmblum($String)
         {
-            $this->Tag          = Trim(str_ireplace("&raquo;", null, strip_tags(htmlspecialchars_decode(explode("|", str_ireplace("laquo;", "|", $String[9]))[1]))));
-            $this->Formed       = trim(explode(",", explode("(", $String[16])[2])[0]);
-            $this->MemberCount  = trim(strip_tags(htmlspecialchars_decode(trim($String[22]), ENT_QUOTES)));
-            $this->Slogan       = trim(strip_tags(htmlspecialchars_decode(trim($String[26]), ENT_QUOTES)));
+            $this->Emblum =
+            [
+                $this->getAttribute('src', $String[2]),
+                $this->getAttribute('src', $String[3]),
+                $this->getAttribute('src', $String[4]),
+            ];
+        }
+        public function getEmblum() { return $this->getEmblum; }
+
+        // TAG + FORMED + MEMBERS + SLOGAN
+        public function setFullDetails($String)
+        {
+            $Temp = [];
+            $addToFocus = false;
+            $addToSeeking = false;
+
+            foreach($String as $i => $s)
+            {
+                // Tag
+                if (strpos($s, 'table_style2'))
+                {
+                    $offset = $i + 3;
+                    $Temp['tag'] = explode(';', $String[$offset])[14];
+                    $Temp['tag'] = trim(str_ireplace('&amp', null, $Temp['tag']));
+                    continue;
+                }
+
+                // Formed
+                if (strpos($s, 'ldst_strftime'))
+                {
+                    $Temp['formed'] = explode('(', $s)[2];
+                    $Temp['formed'] = trim(explode(',', $Temp['formed'])[0]);
+                    continue;
+                }
+
+                // Active members
+                if (strpos($s, 'Active Members'))
+                {
+                    $offset = $i + 1;
+                    $Temp['members'] = $this->strip_html($String[$offset]);
+                    continue;
+                }
+
+                // Rank / Ranking
+                if (strpos($s, 'class') && strpos($s, 'rank'))
+                {
+                    $offset = $i + 3;
+                    $Temp['ranking']['current'] = $this->strip_html($String[$offset]);
+
+                    $offset = $i + 9;
+                    $Temp['ranking']['weekly'] = trim(filter_var($this->strip_html($String[$offset]), FILTER_SANITIZE_NUMBER_INT));
+
+                    $offset = $i + 11;
+                    $Temp['ranking']['monthly'] = trim(filter_var($this->strip_html($String[$offset]), FILTER_SANITIZE_NUMBER_INT));
+                    continue;
+                }
+
+                // Slogan
+                if (strpos($s, 'Company Slogan'))
+                {
+                    $offset = $i + 1;
+                    $Temp['slogan'] = $this->strip_html($String[$offset]);
+                    continue;
+                }
+
+                // Focus
+                if (strpos($s, 'focus_icon') || $addToFocus)
+                {
+                    $addToFocus = true;
+
+                    $data =
+                    [
+                        trim($this->strip_html($this->getAttribute('src', $s))),
+                        trim($this->strip_html($this->getAttribute('title', $s)))
+                    ];
+
+                    if (isset($data[0]) && strlen($data[0]) > 5)
+                    {
+                        $data[1] = str_ireplace('>', null, $data[1]);
+                        $Temp['focus'][] = $data;
+                    }
+                    
+                    
+                    if (strlen($s) < 20)
+                    {
+                        $addToFocus = false;
+                        continue;
+                    }
+                }
+
+                // Seeking
+                if (strpos($s, 'roles_icon') || $addToSeeking)
+                {
+                    $addToSeeking = true;
+
+                    $data =
+                    [
+                        trim($this->strip_html($this->getAttribute('src', $s))),
+                        trim($this->strip_html($this->getAttribute('title', $s)))
+                    ];
+
+                    if (isset($data[0]) && strlen($data[0]) > 5)
+                    {
+                        $data[1] = str_ireplace('>', null, $data[1]);
+                        $Temp['seeking'][] = $data;
+                    }
+                    
+                    
+                    if (strlen($s) < 20)
+                    {
+                        $addToSeeking = false;
+                        continue;
+                    }
+                }
+
+                // Active
+                if (strpos($s, 'Active') || $addToSeeking)
+                {
+                    $offset = $i + 2;
+                    $Temp['active'] = $this->strip_html($String[$offset]);
+                    continue;
+                }
+
+                // Recruitment
+                if (strpos($s, 'Recruitment') || $addToSeeking)
+                {
+                    $offset = $i + 2;
+                    $Temp['recruitment'] = $this->strip_html($String[$offset]);
+                    continue;
+                }
+
+                // Estate Profil
+                if (strpos($s, 'txt_yellow mb10') || $addToSeeking)
+                {
+                    $offset = $i;
+                    $Temp['estate']['zone'] = $this->strip_html($String[$offset]);
+
+                    $offset = $i + 2;
+                    $Temp['estate']['address'] = $this->strip_html($String[$offset]);
+
+                    $offset = $i + 4;
+                    $Temp['estate']['message'] = $this->strip_html($String[$offset]);
+
+                    continue;
+                }
+            }
+
+            $this->Tag          = $Temp['tag'];
+            $this->Formed       = $Temp['formed'];
+            $this->MemberCount  = $Temp['members'];
+            $this->Slogan       = $Temp['slogan'];
+            $this->Ranking      = $Temp['ranking'];
+            $this->Focus        = isset($Temp['focus']) ? $Temp['focus'] : 'Not specified';
+            $this->Active       = $Temp['active'];
+            $this->Seeking      = isset($Temp['seeking']) ? $Temp['seeking'] : 'Not specified';
+            $this->Recruitment  = $Temp['recruitment'];
+            $this->Estate       = isset($Temp['estate']) ? $Temp['estate'] : 'No Estate or Plot';
         }
         public function getCompany() { return $this->Company; }
         public function getName() { return $this->Name; }
@@ -1506,6 +2518,14 @@
         public function getFormed() { return $this->Formed; }
         public function getMemberCount() { return $this->MemberCount; }
         public function getSlogan() { return $this->Slogan; }
+
+        public function getRanking() { return $this->Ranking; }
+        public function getFocus() { return $this->Focus; }
+        public function getActive() { return $this->Active; }
+        public function getSeeking() { return $this->Seeking; }
+        public function getRecruitment() { return $this->Recruitment(); }
+        public function getEstate() { return $this->Estate(); }
+
 
         // MEMBERS / PARSE + SET + GET
         public function parseMembers($Data)
@@ -1523,8 +2543,8 @@
                 $RankImage  = trim(explode("?", explode("&quot;", $D[3])[1])[0]);
                 $Rank       = trim(str_ireplace("&gt;", null, explode("&quot;", $D[3])[8]));
 
-                $ClassImage = explode("?", explode("&quot;",$D[7])[3])[0];
-                $ClassLevel = explode(">", strip_tags(htmlspecialchars_decode(explode("&quot;",$D[7])[10])))[1];
+                $ClassImage = explode("?", explode("&quot;",$D[7])[5])[0];
+                $ClassLevel = explode(">", strip_tags(htmlspecialchars_decode(explode("&quot;",$D[7])[14])))[1];
 
                 $arr =
                 [
@@ -1572,6 +2592,9 @@
      */ 
     class Linkshell
     {
+        use Funky;
+        use Config;
+
         private $ID;
         private $Name;
         private $Server;
@@ -1724,6 +2747,9 @@
      */
     class Achievements
     {
+        use Funky;
+        use Config;
+
         private $TotalPoints = 0;
         private $CurrentPoints = 0;
         private $PointsPercentage = 0;
@@ -1833,6 +2859,8 @@
         // Find data based on a tag
         protected function find($Tag, $Clean = TRUE)
         {
+           $this->log(__LINE__, '[parser] find()', [$Tag, $Clean]);
+
             // Search for element
             foreach($this->SourceCodeArray as $Line)
             {
@@ -1860,6 +2888,8 @@
         // Find data based on a tag, and take the next i amount
         protected function findRange($Tag, $Range, $Tag2 = NULL, $Clean = TRUE, $StartAt = 1)
         {
+            $this->log(__LINE__, '[parser] findRange()', [$Tag, $Range, $Tag2, $Clean, $StartAt]);
+
             $Found      = false;
             $Found2     = false;
             $Interates  = 0;
@@ -1912,6 +2942,8 @@
         // Finds all entries based on a tag, and take the next i amount
         protected function findAll($Tag, $Range, $Tag2 = NULL, $Clean = TRUE)
         {
+            $this->log(__LINE__, '[parser] findAll()', [$Tag, $Range, $Tag2, $Clean]);
+
             $Found      = false;
             $Found2     = false;
             $Interates  = 0;
@@ -1926,10 +2958,10 @@
             {
                 // Trim line
                 $Line = trim($Line);
-                
+
                 // Search line, mark found
                 if(stripos($Line, $Tag) !== false && $Tag) { $Found = true; }
-                if(stripos($Line, $Tag2) !== false && $Tag2) { $Found2 = true; }
+                if(stripos($Line, $Tag2) !== false && $Tag2 && $Found) { $Found2 = true; }
 
                 if ($Found)
                 {
@@ -1967,6 +2999,8 @@
         // Removes section of array up to specified tag
         protected function segment($Tag)
         {
+            $this->log(__LINE__, '[parser] segment()', [$Tag]);
+
             // Loop through source code array
             $i = 0;
             foreach($this->SourceCodeArray as $Line)
@@ -1983,6 +3017,8 @@
         // Clean a found results
         protected function clean($Line)
         {
+            $this->log(__LINE__, '[parser] clean()');
+
             // Strip tags
             $Line = strip_tags(html_entity_decode($Line));
             
@@ -1993,26 +3029,68 @@
             // Return value
             return $Line;
         }
-        
-        // Prints the source array
-        public function printSourceArray()
+
+        // Strip html
+        protected function strip_html($Line)
         {
-            show($this->SourceCodeArray);
+            $this->log(__LINE__, '[parser] strip_html()');
+            return trim(strip_tags(htmlspecialchars_decode(trim($Line), ENT_QUOTES)));
+        }
+
+        // Get attribute
+        protected function getAttribute($attribute, $string)
+        {
+            $this->log(__LINE__, '[parser] getAttribute() = '. $attribute);
+
+            // Add =
+            $attribute = $attribute .'=';
+
+            // Explode string by each param
+            $string = explode(' ', $string);
+
+            // Loop through to find 'attribute',
+            foreach($string as $s)
+            {
+                if (stripos($s, $attribute) !== false)
+                {
+                    $string = $s;
+                    break;
+                }
+            }
+
+            // Strip stuff
+            $string = str_ireplace([$attribute, '&quot;'], null, $string);
+
+            if (is_array($string)) 
+            {
+                $string = implode(null, $string);
+            }
+            
+
+            // return
+            return $string;
         }
         
         // Get the DOMDocument from the source via its URL.
         protected function getSource($URL)
         {
+            $this->log(__LINE__, '[parser] getSource() - URL = '. $URL);
+
             // Get the source of the url
             # Show($URL);
             $Source = $this->curl($URL);
             $this->SourceCodeArray = explode("\n", $Source);
+
+            // Return
+            $this->log(__LINE__, '[parser] getSource() - COMPLETE : URL = '. $URL);
             return true;    
         }
         
         // Fetches page source via CURL
         protected function curl($URL)
         {
+            $this->log(__LINE__, '[parser] curl() - URL = '. $URL);
+
             $options = array(   
                 CURLOPT_RETURNTRANSFER  => true,            // return web page
                 CURLOPT_HEADER          => false,           // return headers
@@ -2036,155 +3114,14 @@
             $html = htmlentities($source);
             //Show($html);
 
+            $this->log(__LINE__, '[parser] curl() - COMPLETE : URL = '. $URL);
             return $html; 
         }
-    } 
 
-    /*  Functions
-     *  ---------
-     */
-    class LSFunctions
-    {
-        #-------------------------------------------#
-        # FUNCTIONS                                 #
-        #-------------------------------------------#
-
-        // This function will sort a multi dimentional array based on a key index, its global, do not use $var = sksort().
-        public function sksort(&$array, $subkey, $sort_ascending) 
+        // Prints the source array
+        public function printSourceArray()
         {
-            if (count($array))
-                $temp_array[key($array)] = array_shift($array);
-            foreach($array as $key => $val){
-                $offset = 0;
-                $found = false;
-                foreach($temp_array as $tmp_key => $tmp_val)
-                {
-                    if(!$found and strtolower($val[$subkey]) > strtolower($tmp_val[$subkey]))
-                    {
-                        $temp_array = array_merge(    (array)array_slice($temp_array,0,$offset),
-                                                    array($key => $val),
-                                                    array_slice($temp_array,$offset)
-                                                  );
-                        $found = true;
-                    }
-                    $offset++;
-                }
-                if(!$found) $temp_array = array_merge($temp_array, array($key => $val));
-            }
-            if ($sort_ascending)
-                $array = array_reverse($temp_array);
-            else 
-                $array = $temp_array;
+            show($this->SourceCodeArray);
         }
-    } 
-
-    #-----------------------------------------------
-    # Example Usage
-    #-----------------------------------------------
-    /*
-    
-    # New API
-    $API = new LodestoneAPI();
-
-    # Parse Linkshell
-    $Linkshell = $API->getLS(
-    [
-        "name"      => "Derp Squad",
-        "server"    => "Excalibur",
-    ]);
-    Show($Linkshell);   
-    
-    
-    $API = new LodestoneAPI();
-    
-
-    $API = new LodestoneAPI();
-
-    # Parse Free Company
-    $FreeCompany = $API->getFC(
-    [
-        "name" => "Chocobo Feather",
-        "server" => "Excalibur"
-    ],
-    [
-        "members"   => true,
-    ]);
-    Show($FreeCompany); // returned object
-
-
-
-    $API = new LodestoneAPI();
-    $API->parseProfile(730968);
-    $Char = $API->getCharacterByID(730968);
-
-    Show($Char);
-
-    */
-    /*
-    # Parse Character
-    $API = new LodestoneAPI();
-    $Character = $API->get(
-    [
-        'id'    => 770079,
-        //"name"      => "Astroth Termiseus",
-        //"server"    => "Excalibur"
-
-        //'name' => 'Aihal Evol',
-        //'server' => 'Masamune',
-    ]);
-    Show($Character);
-    /*
-
-    //$API->printSourceArray();
-    
-    /*
-    // Set an ID
-    $API = new LodestoneAPI();
-
-    // Parse achievements
-    $API->parseAchievements(730968);
-
-    // Show achievements
-    Show($API->getAchievements());
-    */
-    /*
-
-    // Lodestone
-    $API = new LodestoneAPI();
-    
-    // Set category id
-    $CategoryID = 2;
-
-    // Parse achievement by category
-    $API->parseAchievementsByCategory($CategoryID, 730968);
-
-    // Get achievements
-    Show($API->getAchievements()[$CategoryID]);
-    
-    /*
-    # Parse Character
-    show("> new LodestoneAPi");
-    $API = new LodestoneAPI();
-
-    show("> get");
-    $Character = $API->get(
-    [
-        "name"      => "Premium Virtue",
-        "server"    => "Excalibur"
-    ]);
-
-    show("> vardump");
-    show($Character);
-
-    $API = new LodestoneAPI();
-    $Options = 
-    [
-        'topics' => true,
-    ];
-
-    $Lodestone = $API->Lodestone($Options);
-
-    Show($Lodestone->getTopics());
-    */
-
+    }
 ?>

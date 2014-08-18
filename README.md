@@ -38,6 +38,11 @@ You can always get the latest source from <http://github.com/demonicpagan/Lodest
 
 Change log - Dates are in Epoch time
 -----------------------------------
+1408397791
+
+*	Updated api.php in accordance to [6725b50](https://github.com/viion/XIVPads-LodestoneAPI/commit/6725b502db9ded58ebecd5b452569c62a0fde185)
+
+
 1398434162
 
 *	Updated api.php in accordence to [8d2b7d9](https://github.com/viion/XIVPads-LodestoneAPI/commit/8d2b7d99bcef5695d9cde67e76f43cadc7d7623c) and [cfeecd7](https://github.com/viion/XIVPads-LodestoneAPI/commit/cfeecd7720e8af744b64723e964371472a714adb)

@@ -103,9 +103,9 @@
          */
         function log($line, $message, $Array = null)
         {
-            if (array_key_exists('API_Logger', $GLOBALS))
+            if (array_key_exists('LodestoneAPILogger', $GLOBALS))
             {
-                global $API_Logger;
+                global $LodestoneAPILogger;
 
                 // If we have an array, append per param
                 if ($Array)
@@ -121,7 +121,7 @@
                 $message = $line .' > '. $message;
 
                 // Log
-                $API_Logger->log($message);
+                $LodestoneAPILogger->log($message);
             }
         }
     }
@@ -515,29 +515,48 @@
                 $this->getSource($this->URL['freecompany']['profile'] . str_ireplace(array('%name%', '%server%'), array(str_ireplace(" ", "+", $Name), $Server), $this->URL['search']['query']));
 
                 // Get all found data
-                $Found = $this->findAll('groundcompany_name', 20, NULL, false);
+                $Found = $this->findAll('ic_freecompany_box', null, '/tr', false);
                 
                 // if found
                 if ($Found)
                 {
                     foreach($Found as $F)
                     {
-                        $Company    = $this->clean($F[0]);
-                        $ID         = trim(explode("/", $F[2])[3]);
-                        $Name       = trim(explode("(", $this->clean($F[2]))[0]);
-                        $Server     = trim(str_ireplace(")", "", explode("(", $this->clean($F[2]))[1]));
-                        $Members    = trim(explode(":", $this->clean($F[5]))[1]);
-                        $Formed     = trim(explode(",", explode("(", $F[10])[2])[0]);
+                        $Temp = [];
+                        foreach($F as $i => $line)
+                        {
+                            if (stripos($line, 'ic_crest_64') !== false)
+                            {
+                                $offset = $i + 2;
+                                $Temp['emblum'][] = $this->getAttribute('src', $F[$offset]);
+                                $Temp['emblum'][] = $this->getAttribute('src', $F[$offset + 1]);
+                                $Temp['emblum'][] = $this->getAttribute('src', $F[$offset + 2]);
+                            }
 
-                        $this->Search['results'][] = 
-                        array(
-                            "id"        => $ID,
-                            "company"   => $Company,
-                            "name"      => $Name,
-                            "server"    => $Server,
-                            "members"   => $Members,
-                            "formed"    => $Formed,
-                        );
+                            if (stripos($line, 'groundcompany_name') !== false)
+                            {
+                                $Temp['grandcompany'] = $this->strip_html($line);
+                            }
+
+                            if (stripos($line, 'player_name_gold') !== false)
+                            {
+                                $offset = $i + 1;
+                                $data = explode('(', $this->strip_html($F[$offset]));
+                                $Temp['name'] = trim($data[0]);
+                                $Temp['server'] = trim(str_ireplace(')', null, $data[1]));
+
+                                $Temp['id'] = explode('/', $F[$offset])[3];
+                                $Temp['url'] = $this->URL['freecompany']['profile'] . $Temp['id'];
+                            }
+
+                            if (stripos($line, 'ldst_strftime') !== false)
+                            {
+                                $Temp['formed'] = explode('(', $line)[2];
+                                $Temp['formed'] = explode(',', $Temp['formed'])[0];
+                            }
+                        }
+
+                        $this->Search['results'][] = $Temp;
                     }
 
                     // If to get exact
@@ -905,7 +924,7 @@
                         $this->getSource($FreeCompany->getLodestone() . $this->URL['freecompany']['member'] . str_ireplace('%page%', $Page, $this->URL['freecompany']['memberpage']));
 
                         // Set Members
-                        $MemberArray = $FreeCompany->parseMembers($this->findAll('player_name_area', 18, null, null));
+                        $MemberArray = $FreeCompany->parseMembers($this->findAll('thumb_cont_black_50', null, '/message_ic_box', false));
 
                         // Merge existing member list with new member array
                         $MembersList = array_merge($MembersList, $MemberArray);
@@ -969,6 +988,7 @@
     class_alias('Viion\Lodestone\API', 'API\Lodestone\API');
     class_alias('Viion\Lodestone\API', 'LodestoneAPI');
     class_alias('Viion\Lodestone\API', 'API\API');
+    class_alias('Viion\Lodestone\API', '_Shared\Lodestone\API');
 
 
     /*  Lodestone
@@ -2534,39 +2554,75 @@
             $temp = [];
 
             // Loop through data
-            foreach($Data as $D)
+            if ($Data)
             {
-                $Name       = trim(explode("(", trim(strip_tags(htmlspecialchars_decode($D[1]), ENT_QUOTES)))[0]);
-                $Server     = trim(str_ireplace(")", "", trim(explode("(", trim(strip_tags(htmlspecialchars_decode($D[1]), ENT_QUOTES)))[1])));
-                $ID         = trim(explode("/", $D[1])[3]);
+                foreach($Data as $D)
+                {
+                    $arr = [];
+                    foreach($D as $i => $line)
+                    {
+                        if (stripos($line, 'thumb_cont_black_50') !== false)
+                        {
+                            $offset = $i + 2;
+                            $arr['avatar'] = $this->getAttribute('src', $D[$offset]);
+                            $arr['avatar'] = str_ireplace('50x50', '96x96', $arr['avatar']);
+                        }
 
-                $RankImage  = trim(explode("?", explode("&quot;", $D[3])[1])[0]);
-                $Rank       = trim(str_ireplace("&gt;", null, explode("&quot;", $D[3])[8]));
+                        if (stripos($line, 'name_box') !== false)
+                        {
+                            $offset = $i + 1;
+                            $data = $this->strip_html($D[$offset]);
+                            $data = explode('(', $data);
 
-                $ClassImage = explode("?", explode("&quot;",$D[7])[5])[0];
-                $ClassLevel = explode(">", strip_tags(htmlspecialchars_decode(explode("&quot;",$D[7])[14])))[1];
+                            $arr['name'] = trim($data[0]);
+                            $arr['server'] = trim(str_ireplace(')', null, $data[1]));
 
-                $arr =
-                [
-                    'id'        => $ID,
-                    'name'      => $Name,
-                    'server'    => $Server,
+                            $data = explode('/', $D[$offset]);
+                            $arr['id'] = trim($data[3]);
+                        }
 
-                    'rank' =>
-                    [
-                        'image' => $RankImage,
-                        'title' => $Rank
-                    ],
+                        if (stripos($line, 'fc_member_status') !== false)
+                        {
+                            $offset = $i + 1;
+                            $arr['rank']['title'] = trim($this->strip_html($D[$offset]));
+                            $arr['rank']['image'] = $this->getAttribute('src', $D[$offset]);
+                        }
 
-                    'class' =>
-                    [
-                        'image' => $ClassImage,
-                        'level' => $ClassLevel,
-                    ]
-                ];
-                
-                // Append to array
-                $temp[] = $arr;
+                        if (stripos($line, 'ic_class') !== false)
+                        {
+                            $offset = $i + 2;
+                            $arr['class']['image'] = $this->getAttribute('src', $D[$offset]);
+                        }
+
+                        if (stripos($line, 'lv_class') !== false)
+                        {
+                            $arr['class']['level'] = filter_var($this->strip_html($line), FILTER_SANITIZE_NUMBER_INT);
+                        }
+
+                        if (stripos($line, 'ic_gc') !== false)
+                        {
+                            $offset = $i + 1;
+                            $arr['grandcompany']['image'] = $this->getAttribute('src', $D[$offset]);
+
+                            $data = explode('/', $this->strip_html($D[$offset]));
+                            if (isset($data[0]) && !empty($data[0]))
+                            {
+                                $arr['grandcompany']['name'] = trim($data[0]);
+                                $arr['grandcompany']['rank'] = trim($data[1]);
+                            }
+                            else
+                            {
+                                // Not in a Grand CompanyIcon
+                                $arr['grandcompany']['image'] = null;
+                                $arr['grandcompany']['name'] = null;
+                                $arr['grandcompany']['rank'] = null;
+                            }
+                        }
+                    }
+
+                    // Append to array
+                    $temp[] = $arr;
+                }
             }
 
             // Return temp
@@ -2590,7 +2646,7 @@
     /*  Linkshell
      *  ---------
      */ 
-    class Linkshell
+    class Linkshell extends Parser
     {
         use Funky;
         use Config;
@@ -2634,109 +2690,103 @@
         // MEMBERS
         public function setMembers($Array)
         {
-            $temp = [];
+            $Members = [];
 
             // Loop through members
             foreach($Array as $i => $arr)
             {
-                // Rank can move offset. Take it out, process it and remove it
-                if (stripos($arr[9], "ic_") !== false)
+                $temp = [];
+                $temp['rank'] = 'member';
+
+                foreach($arr as $ii => $line)
                 {
-                    $Rank = isset(explode("&quot;", $arr[9])[1]) ? trim(explode("&quot;", $arr[9])[1]) : null;
-                    switch($Rank)
+                    if (stripos($line, 'thumb_cont_black_50') !== false)
                     {
-                        default: $Rank = 'member'; break;
-                        case 'ic_master': $Rank = 'master'; break;
-                        case 'ic_leader': $Rank = 'leader'; break;
+                        $offset = $ii + 1;
+                        $temp['id'] = explode('/', $arr[$offset]);
+                        $temp['id'] = $temp['id'][3];
+
+                        $offset = $ii + 2;
+
+                        $temp['avatar'] = $arr[$offset];
+                        $temp['avatar'] = $this->getAttribute('src', $temp['avatar']);
                     }
-                    $arr[9] = null;
-                    $arr = array_values(array_filter($arr));
-                }
-                else
-                {
-                    // Default rank
-                    $Rank = 'member';
-                }
 
-                // Char data
-                $ID                 = trim(explode("/", $arr[1])[3]);
-                $Avatar             = trim(explode("?", explode("&quot;", $arr[2])[1])[0]);
-                $Name               = trim(explode("(", strip_tags(htmlspecialchars_decode($arr[8])))[0]);
-                $Server             = trim(explode("(", str_ireplace(")", null, strip_tags(htmlspecialchars_decode($arr[8]))))[1]);
-
-                // Class
-                $ClassIcon          = trim(explode("&quot;", $arr[12])[3]);
-                $ClassLevel         = intval(trim(strip_tags(htmlspecialchars_decode($arr[13]))));
-
-                // Company
-                $CompanyName = null; $CompanyRank = null;
-                $CompanyIcon        = isset(explode("&quot;", $arr[15])[1]) ? trim(explode("&quot;", $arr[15])[1]) : null;
-                if ($CompanyIcon)
-                {
-                    $CompanyName    = trim(explode("/", str_ireplace("-->", null, strip_tags(htmlspecialchars_decode($arr[15]))))[0]);
-                    $CompanyRank    = trim(explode("/", str_ireplace("-->", null, strip_tags(htmlspecialchars_decode($arr[15]))))[1]);
-                }
-
-                $FC_Icon = []; $Image1 = null; $Image2 = null; $Image3 = null; $FC_ID = null; $FC_Name = null;
-                foreach($arr as $i => $a)
-                {
-                    // Free Company (fixed by @stygiansabyss for patch 2.1)
-                    if (stripos($a, 'ic_crest_32') !== false)
+                    if (stripos($line, 'name_box') !== false)
                     {
-                        $Image1 = explode("&quot;", $arr[$i + 1]); if (isset($Image1[1]) && stripos($Image1[0], 'img') != false) { $Image1 = trim($Image1[1]); } else { $Image1 = false; }
-                        $Image2 = explode("&quot;", $arr[$i + 2]); if (isset($Image2[1]) && stripos($Image2[0], 'img') != false) { $Image2 = trim($Image2[1]); } else { $Image2 = false; }
-                        $Image3 = explode("&quot;", $arr[$i + 3]); if (isset($Image3[1]) && stripos($Image3[0], 'img') != false) { $Image3 = trim($Image3[1]); } else { $Image3 = false; }
-                        
-                        if ($Image1) { $FC_Icon[] = $Image1; }
-                        if ($Image2) { $FC_Icon[] = $Image2; }
-                        if ($Image3) { $FC_Icon[] = $Image3; }
+                        $offset = $ii + 1;
+                        $temp['name'] = $arr[$offset];
+                        $temp['name'] = $this->strip_html($temp['name']);
+                        $temp['name'] = explode('(', $temp['name']);
+                        $temp['server'] = trim(str_ireplace(')', null, $temp['name'][1]));
+                        $temp['name'] = trim($temp['name'][0]);
+                    }
+
+                    if (stripos($line, 'ic_master') !== false)
+                    {
+                        $temp['rank'] = 'master';
+                    }
+
+                    if (stripos($line, 'ic_leader') !== false)
+                    {
+                        $temp['rank'] = 'leader';
+                    }
+
+                    if (stripos($line, 'ic_class') !== false)
+                    {
+                        $offset = $ii + 1;
+                        $temp['class']['icon'] = $this->getAttribute('src', $arr[$offset]);
+
+                        $offset = $ii + 2;
+                        $temp['class']['level'] = filter_var($arr[$offset], FILTER_SANITIZE_NUMBER_INT);;
 
                     }
 
-                    // FC Details
-                    if (stripos($a, 'txt_gc') !== false)
+                    if (stripos($line, 'col3box_center') !== false)
                     {
-                        $FC_ID = trim(explode("/", $a)[4]);
-                        $FC_Name = trim(strip_tags(htmlspecialchars_decode($a)));
+                        $offset = $ii + 1;
+                        $temp['grandcompany']['icon'] = $this->getAttribute('src', $arr[$offset]);
+
+                        $data = explode('/', $this->strip_html($arr[$offset]));
+                        $temp['grandcompany']['name'] = $data[0];
+                        $temp['grandcompany']['rank'] = $data[1];
                     }
-                }                
 
-                // Sort array
-                $arr =
-                [
-                    'id'        => $ID,
-                    'avatar'    => $Avatar,
-                    'name'      => $Name,
-                    'server'    => $Server,
-                    'rank'      => $Rank,
+                    if (stripos($line, 'col3box_center') !== false)
+                    {
+                        $offset = $ii + 1;
+                        $temp['grandcompany']['icon'] = $this->getAttribute('src', $arr[$offset]);
 
-                    'class' =>
-                    [
-                        'icon'  => $ClassIcon,
-                        'level' => $ClassLevel,
-                    ],
-                    
-                    'company' =>
-                    [
-                        'icon'  => $CompanyIcon,
-                        'name'  => $CompanyName,
-                        'rank'  => $CompanyRank,
-                    ],
-                    
-                    'freecompany' =>
-                    [
-                        'icon'  => $FC_Icon,
-                        'id'    => $FC_ID,
-                        'name'  => $FC_Name,
-                    ],
-                ];
+                        $data = explode('/', $this->strip_html($arr[$offset]));
+                        $temp['grandcompany']['name'] = $data[0];
+                        $temp['grandcompany']['rank'] = $data[1];
+                    }
+
+                    if (stripos($line, 'ic_crest_32') !== false)
+                    {
+                        $offset = $ii + 2;
+                        $temp['company']['icon'][] = $this->getAttribute('src', $arr[$offset]);
+
+                        $offset = $ii + 3;
+                        $temp['company']['icon'][] = $this->getAttribute('src', $arr[$offset]);
+
+                        $offset = $ii + 4;
+                        $temp['company']['icon'][] = $this->getAttribute('src', $arr[$offset]);
+                    }
+
+                    if (stripos($line, 'txt_gc') !== false)
+                    {
+                        $temp['company']['name'] = $this->strip_html($line);
+                        $temp['company']['id'] = explode('/', $line)[4];
+                    }
+                }
 
                 // append to temp array
-                $temp[] = $arr;
+                $Members[] = $temp;
             }
 
             // Set Members
-            $this->Members = $temp;
+            $this->Members = $Members;
         }
         public function getMembers() { return $this->Members; }
     }
@@ -2783,60 +2833,67 @@
             $NewList = array();
             
             // Loop through achievement blocks
-            foreach($Array as $A)
+            if ($Array)
             {
-                // Temp data array
-                $Temp = array();
-                
-                // Loop through block data
-                $i = 0;
-                foreach($A as $Line)
+                foreach($Array as $A)
                 {
-                    // Get achievement Data
-                    if (stripos($Line, 'achievement_name') !== false) 
-                    { 
-                        $Data = trim(strip_tags(html_entity_decode($Line))); 
-                        $Temp['name'] = str_ireplace("&#39;", "'", $Data);
+                    // Temp data array
+                    $Temp = array();
+                    
+                    // Loop through block data
+                    $i = 0;
+                    foreach($A as $Line)
+                    {
+                        // Get achievement Data
+                        if (stripos($Line, 'achievement_name') !== false) 
+                        { 
+                            $Data = trim(strip_tags(html_entity_decode($Line))); 
+                            $Temp['name'] = str_ireplace("&#39;", "'", $Data);
+                        }
+                        if (stripos($Line, 'achievement_point') !== false) 
+                        { 
+                            $Data = trim(strip_tags(html_entity_decode($Line))); 
+                            $Temp['points'] = intval(htmlspecialchars_decode($Data)); 
+                        }
+                        if (stripos($Line, 'getElementById') !== false) 
+                        { 
+                            $Temp['date'] = trim(filter_var(explode("(", strip_tags(html_entity_decode($Line)))[2], FILTER_SANITIZE_NUMBER_INT)); 
+                        }
+                        if (stripos($Line, 'bt_more') !== false) 
+                        { 
+                            $Temp['id'] = explode("/", $Line)[6];
+                            $Temp['xivdb'] = 'http://xivdb.com/?achievement/'. $Temp['id'] .'/'. str_ireplace(' ', '-', $Temp['name']);
+                        }
+
+                        // Increment
+                        $i++;
                     }
-                    if (stripos($Line, 'achievement_point') !== false) 
+                    
+                    // Obtained or not, if there is a date, the achievement is obtained.
+                    if (isset($Temp['date'])) { $Temp['obtained'] = true; } else { $Temp['obtained'] = false; }
+                    
+                    // If achievement obtained, add points
+                    if ($Temp['obtained']) 
                     { 
-                        $Data = trim(strip_tags(html_entity_decode($Line))); 
-                        $Temp['points'] = intval(htmlspecialchars_decode($Data)); 
-                    }
-                    if (stripos($Line, 'getElementById') !== false) 
-                    { 
-                        $Temp['date'] = trim(filter_var(explode("(", strip_tags(html_entity_decode($Line)))[2], FILTER_SANITIZE_NUMBER_INT)); 
-                    }
-                    if (stripos($Line, 'bt_more') !== false) 
-                    { 
-                        $Temp['id'] = explode("/", $Line)[6];
-                        $Temp['xivdb'] = 'http://xivdb.com/?achievement/'. $Temp['id'] .'/'. str_ireplace(' ', '-', $Temp['name']);
+                        $this->CurrentPoints += $Temp['points']; 
+                        $this->CurrentAchievements++;
                     }
 
-                    // Increment
-                    $i++;
+                    // Set the total obtainable points
+                    $this->TotalPoints += $Temp['points'];
+                    $this->TotalAchievements++;
+                    
+                    // Append temp data
+                    $NewList[] = $Temp;
                 }
-                
-                // Obtained or not, if there is a date, the achievement is obtained.
-                if (isset($Temp['date'])) { $Temp['obtained'] = true; } else { $Temp['obtained'] = false; }
-                
-                // If achievement obtained, add points
-                if ($Temp['obtained']) 
-                { 
-                    $this->CurrentPoints += $Temp['points']; 
-                    $this->CurrentAchievements++;
-                }
-
-                // Set the total obtainable points
-                $this->TotalPoints += $Temp['points'];
-                $this->TotalAchievements++;
-                
-                // Append temp data
-                $NewList[] = $Temp;
             }
 
             // Set points percentage
-            $this->PointsPercentage = (round($this->CurrentPoints / $this->TotalPoints, 3) * 100);
+            if ($this->CurrentPoints > 0 && $this->TotalPoints > 0) 
+            {
+                $this->PointsPercentage = (round($this->CurrentPoints / $this->TotalPoints, 3) * 100);
+            }
+            
             
             // Set Achievement List
             $this->List = $NewList; 
@@ -3121,7 +3178,7 @@
         // Prints the source array
         public function printSourceArray()
         {
-            show($this->SourceCodeArray);
+            $this->show($this->SourceCodeArray);
         }
     }
 ?>

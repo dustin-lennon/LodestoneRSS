@@ -2007,7 +2007,8 @@
                     // ID Lodestone
                     if (stripos($Line, 'bt_db_item_detail') !== false) 
                     {
-                        $Data = trim(str_ireplace(array('>', '"'), NULL, html_entity_decode(preg_match("/\/lodestone\/playguide\/db\/item\/([a-z0-9]{11})\//", $Line, $matches)))); 
+                        $index = ($i + 1);
+                        $Data = trim(str_ireplace(array('>', '"'), NULL, html_entity_decode(preg_match("/\/lodestone\/playguide\/db\/item\/([a-z0-9]{11})\//", $A[$index], $matches)))); 
                         $Temp['id_lodestone'] = $matches[1];
                     }
 
@@ -2230,13 +2231,17 @@
 
             return $data;
         }
-        public function getClassJobsOrdered($Order = false, $OrderBy = null, $ArrayType = null)
+        public function getClassJobsOrdered($Specific = null, $Order = false, $OrderBy = null, $ArrayType = null)
         {
             // OPrder
             if (strtolower($Order) == 'asc') { $Ascending = true; } else { $Ascending = false; }
 
+            if (!$Specific) {
+                $Specific = 'named';
+            }
+
             // Get the jobs
-            $ClassJobs = $this->getClassJobs($ArrayType);
+            $ClassJobs = $this->getClassJobs($ArrayType)[$Specific];
 
             // Set order by
             if (!$OrderBy) { $OrderBy = 'level'; }
@@ -2352,6 +2357,21 @@
 
             return $character_data;
         }
+        
+        public function probable_jobs()
+        {
+        $jobarray=$this->getClassJobs($ArrayType)["named"];
+        $req=array('PLD'=>array('main'=>"gladiator", 'sub'=>"conjurer"), 'MNK'=>array('main'=>"pugilist", 'sub'=>"lancer"), 'WAR'=>array('main'=>"marauder", 'sub'=>"gladiator"), 'DRG'=>array('main'=>"lancer", 'sub'=>"marauder"), 'BRD'=>array('main'=>"archer", 'sub'=>"pugilist"), 'WHM'=>array('main'=>"conjurer", 'sub'=>"arcanist"), 'BLM'=>array('main'=>"thaumaturge", 'sub'=>"archer"), 'SMN'=>array('main'=>"arcanist", 'sub'=>"thaumaturge"), 'SCH'=>array('main'=>"arcanist", 'sub'=>"conjurer"));
+        $jobs=array("PLD", "MNK", "WAR", "DRG", "BRD", "WHM", "BLM", "SMN", "SCH");
+        foreach ($jobs as $job_name)
+        {
+            if ($jobarray[$req[$job_name]['main']]['level']!="-"&&$jobarray[$req[$job_name]['sub']]['level']!="-"&&$jobarray[$req[$job_name]['main']]['level']>=30&&$jobarray[$req[$job_name]['sub']]['level']>=15)
+            {
+                $returnarray[$job_name]=$jobarray[$req[$job_name]['main']]['level'];
+            }
+        }
+        return $returnarray;
+    }
     }
 
     /*  Free Company
@@ -2919,7 +2939,7 @@
                     $this->TotalAchievements++;
                     
                     // Append temp data
-                    $NewList[] = $Temp;
+                    $NewList[$Temp['id']] = $Temp;
                 }
             }
 
@@ -2989,7 +3009,7 @@
                     }
                 }
 
-                $achievements[] = $temp;
+                $achievements[$temp['id']] = $temp;
             }
 
             $this->List = $achievements;
